@@ -1,0 +1,5 @@
+print ('volume of a rectangular prism')
+a = float(input("whats the length or the prism:"))
+b = float(input("whats the height of the prism:"))
+c = float(input("whats the width of the prism:"))
+print (a * c * b)
