@@ -16,8 +16,9 @@ Created on Sun Jul  3 17:15:47 2022
 """
 
 # make a boba menu, e.g. with white jelly
-# shouldn't click out before 2 seconds of seeing day won screen (tried)
+# shouldn't click out before 2 seconds of seeing day won screen (tried with wait)
 # it keeps going after allgoalswonImg lol
+# thenumber goes to -1 after failure first day goals
 
 # rect_example = pygame.Rect((0, 0), (32, 32))  # First tuple is position (from topleft corner), 
                                                 # second is size.
@@ -33,7 +34,7 @@ print("Initializing pygame: {0} successes and {1} failures".format(successes, fa
 
 # Window setup
 original_width, original_height = 177, 140 # my boba backdrop's width, height (were 148, 140)
-scaling_factor = 4
+scaling_factor = 5
 original_screen = pygame.Surface((original_width,original_height))
 fullwindow = pygame.display.set_mode((scaling_factor*original_width, scaling_factor*original_height))  
 pygame.display.set_caption('Boba Go Round')
@@ -47,7 +48,6 @@ def exitgame(): # define for when I need to exit
     sys.exit()
 
 def show_numbers_in_font(fontstring,thenumber,toplefttuple,gapbwdigits):
-    # show_numbers_in_font("gray",timeleft,[(3,3), (7,3), (11,3)])
     zeroImg = pygame.image.load("{0}_0.png".format(fontstring))
     zeroimgwidth = zeroImg.get_size()[0]
     to_add = zeroimgwidth+gapbwdigits
@@ -69,6 +69,55 @@ def remove_cup_large():
     topchosen = False
     bottomchosen = False
     return showcuplarge, showcuplargeempty, showtapioca, showice, highlightlid, highlightstraw, topchosen, bottomchosen
+
+def serve_customer(customer1location_scaled,fullcustomers_width_scaled,
+                   showrequest,topchosen,highlightstraw,highlightlid,
+                   showcupsmallgiven,custwaiting,cupsmallgiven_location,givennumbot,
+                   givennumtop,givenstrawnum,giventapioca,timecustserved,surpriseme,
+                   givenice,gavesurprise,cupsmallnumbot,cupsmallnumtop,smallstrawnum,
+                   smalllidnum,smalltapioca,smallice,happyorangry,goalsmode,speedrun,
+                   angrycustcount):
+    xymouse_tuple = pygame.mouse.get_pos()
+    customerclicked = int(6-((customer1location_scaled[0]+fullcustomers_width_scaled)-xymouse_tuple[0])/(fullcustomers_width_scaled/6))
+    if showrequest[customerclicked] and all([topchosen, highlightstraw, highlightlid]): 
+        # the large cup has to be full and lid-ed and straw-ed to serve
+        showcupsmallgiven[customerclicked] = 1
+        cupsmallgiven_location[customerclicked] = (customer1location[0]+customerclicked*(customer_size[0]+customer_inbetween_pix), (customer1location[1]+customer_size[1]-1))
+        givennumbot[customerclicked] = cupnumbot
+        givennumtop[customerclicked] = cupnumtop
+        givenstrawnum[customerclicked], givenlidnum[customerclicked] = strawnum, lidnum
+        giventapioca[customerclicked], givenice[customerclicked] = showtapioca, showice
+        # start a countdown before showing the customer as happy or angry
+        timecustserved[customerclicked] = pygame.time.get_ticks()
+        # determine if the customer is satisfied or not
+        if (surpriseme[customerclicked] and not (givennumbot[customerclicked],
+                                         givennumtop[customerclicked],
+                                         givenstrawnum[customerclicked],
+                                         givenlidnum[customerclicked],
+                                         giventapioca[customerclicked],
+                                         givenice[customerclicked]) == gavesurprise[customerclicked] and \
+            (random.random() > 0.15)) or \
+            (givennumbot[customerclicked] == cupsmallnumbot[customerclicked] and \
+                givennumtop[customerclicked] == cupsmallnumtop[customerclicked] and \
+                    givenstrawnum[customerclicked] == smallstrawnum[customerclicked] and \
+                        givenlidnum[customerclicked] == smalllidnum[customerclicked] and \
+                            giventapioca[customerclicked] == smalltapioca[customerclicked] and \
+                                givenice[customerclicked] == smallice[customerclicked]):
+            happyorangry[customerclicked] = "happy"
+            gavesurprise[customerclicked] = (0, 0, 0, 0, 0, 0)
+            custwaiting[customerclicked] = 0 # the customer is satisfied so he is no longer waiting for his drink
+        else:
+            happyorangry[customerclicked] = "angry"
+            if goalsmode or speedrun: angrycustcount += 1
+            if surpriseme[customerclicked]: 
+                gavesurprise[customerclicked] = (givennumbot[customerclicked],
+                                                 givennumtop[customerclicked],
+                                                 givenstrawnum[customerclicked],
+                                                 givenlidnum[customerclicked],
+                                                 giventapioca[customerclicked],
+                                                 givenice[customerclicked])
+    return showcupsmallgiven,custwaiting,cupsmallgiven_location,givennumbot,givennumtop, \
+        givenstrawnum,giventapioca,timecustserved,happyorangry,gavesurprise,angrycustcount
 
 def scale(thetuple):
     thetuple_scaled = tuple(ii*scaling_factor for ii in thetuple)
@@ -127,6 +176,8 @@ surpriseme = [False, False, False, False, False, False]
 readyforrequest = True
 showphoneorder = False
 showdaywin = False
+angrycustcount = 0
+cupdrag = False
 showrequest =    [0, 0, 0, 0, 0, 0]
 custwaiting =    [0]*6
 custstarttime =  [0, 0, 0, 0, 0, 0]
@@ -187,16 +238,19 @@ ingredient2rect = pygame.Rect((scaling_factor*(xtopleftingrs+ingredients_square_
 ingredient3rect = pygame.Rect((scaling_factor*xtopleftingrs, scaling_factor*(ytopleftingrs+ingredients_square_sidelength+gapingrsquares_pix)), 
                               (scaling_factor*ingredients_square_sidelength, scaling_factor*ingredients_square_sidelength))
 # ingredient 4 tapioca
-ingredient4rect = pygame.Rect((scaling_factor*(xtopleftingrs+ingredients_square_sidelength+gapingrsquares_pix), scaling_factor*(ytopleftingrs+ingredients_square_sidelength+gapingrsquares_pix)), 
+ingredient4rect = pygame.Rect((scaling_factor*(xtopleftingrs+ingredients_square_sidelength+gapingrsquares_pix), 
+                               scaling_factor*(ytopleftingrs+ingredients_square_sidelength+gapingrsquares_pix)), 
                               (scaling_factor*ingredients_square_sidelength, scaling_factor*ingredients_square_sidelength))
 # ingredient 5 taro tea
 ingredient5rect = pygame.Rect((scaling_factor*(xtopleftingrs+2*ingredients_square_sidelength+2*gapingrsquares_pix), scaling_factor*ytopleftingrs), 
                               (scaling_factor*ingredients_square_sidelength, scaling_factor*ingredients_square_sidelength))
 # ingredient 6 ice
-ingredient6rect = pygame.Rect((scaling_factor*(xtopleftingrs+2*ingredients_square_sidelength+2*gapingrsquares_pix), scaling_factor*(ytopleftingrs+ingredients_square_sidelength+gapingrsquares_pix)), 
+ingredient6rect = pygame.Rect((scaling_factor*(xtopleftingrs+2*ingredients_square_sidelength+2*gapingrsquares_pix), 
+                               scaling_factor*(ytopleftingrs+ingredients_square_sidelength+gapingrsquares_pix)), 
                               (scaling_factor*ingredients_square_sidelength, scaling_factor*ingredients_square_sidelength))
 ingrs_rectslist = [ingredient1rect,ingredient2rect,ingredient3rect,ingredient4rect,ingredient5rect,ingredient6rect]
-cuplargeposition = ((xtopleftingrs+3*ingredients_square_sidelength+3*gapingrsquares_pix), ytopleftingrs)
+cuplargeposition_normal = ((xtopleftingrs+3*ingredients_square_sidelength+3*gapingrsquares_pix), ytopleftingrs)
+cuplargeposition = cuplargeposition_normal
 cuplargeposition_scaled = scale(cuplargeposition)
 cuplarge_widthpix, cuplarge_heightpix = 33, 43
 cuplargearea = pygame.Rect(cuplargeposition_scaled, (scaling_factor*cuplarge_widthpix,scaling_factor*cuplarge_heightpix))
@@ -205,9 +259,11 @@ gapingramount_pix = 2
 ingrsamount_locs =  [(xtopleftingrs+gapingramount_pix,ytopleftingrs+gapingramount_pix), 
                      (xtopleftingrs+ingredients_square_sidelength+gapingrsquares_pix+gapingramount_pix,ytopleftingrs+gapingramount_pix),
                      (xtopleftingrs+gapingramount_pix,ytopleftingrs+ingredients_square_sidelength+gapingrsquares_pix+gapingramount_pix),
-                     (xtopleftingrs+ingredients_square_sidelength+gapingrsquares_pix+gapingramount_pix,ytopleftingrs+ingredients_square_sidelength+gapingrsquares_pix+gapingramount_pix),
+                     (xtopleftingrs+ingredients_square_sidelength+gapingrsquares_pix+gapingramount_pix,
+                      ytopleftingrs+ingredients_square_sidelength+gapingrsquares_pix+gapingramount_pix),
                      (xtopleftingrs+2*ingredients_square_sidelength+2*gapingrsquares_pix+gapingramount_pix,ytopleftingrs+gapingramount_pix),
-                     (xtopleftingrs+2*ingredients_square_sidelength+2*gapingrsquares_pix+gapingramount_pix,ytopleftingrs+ingredients_square_sidelength+gapingrsquares_pix+gapingramount_pix)]
+                     (xtopleftingrs+2*ingredients_square_sidelength+2*gapingrsquares_pix+
+                      gapingramount_pix,ytopleftingrs+ingredients_square_sidelength+gapingrsquares_pix+gapingramount_pix)]
 
 lidstraw_square_sidelength = 10
 xlids = (3+3*ingredients_square_sidelength+cuplarge_widthpix+4*1)
@@ -298,8 +354,8 @@ alreadywaited = False
 
 
 ################################# START RUN LOOP
-startmintime, startextratime = 4.5, 14 # min 3 seconds, max 19 seconds between customers
-countdown = (startmintime + random.choice(list(range(1,(startextratime+1)))))*1000 
+startmintime, startextratime = 3, 14 # for speedrun: min 3 seconds, max 19 seconds between customers
+countdown = (3 + random.choice(list(range(1,3))))*1000 # make the first countdown short-ish so we're not waiting years for 1st cust
 running = True
 while running:
     clock.tick(FPS)
@@ -324,7 +380,43 @@ while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:  # The user pressed the close button in the top corner of the window
             running = False
-            
+        elif event.type == pygame.MOUSEBUTTONDOWN and cuplargearea.collidepoint(pygame.mouse.get_pos()) and \
+             topchosen and highlightstraw and highlightlid and not cupcancelarea.collidepoint(pygame.mouse.get_pos()): 
+                 # the large cup is ready and the player is clicking on it
+             if event.button == 1:
+                 if not waitfordepress:
+                     cupdrag = True
+                     waitfordepress = True
+                     offset_x = cuplargearea.x - pygame.mouse.get_pos()[0]
+                     offset_y = cuplargearea.y - pygame.mouse.get_pos()[1]
+        elif event.type == pygame.MOUSEMOTION and cupdrag:
+                cupdragx, cupdragy = pygame.mouse.get_pos()
+                cuplargeposition = (int(cuplargeposition_normal[0] + (cupdragx + offset_x) 
+                                        - 80)/scaling_factor, int(cuplargeposition_normal[1] + 
+                                                                  (cupdragy + offset_y) - 80)/scaling_factor) 
+                                                                  # the -80 is a temporary fix cuz I don't understand where it's coming from
+        elif event.type == pygame.MOUSEBUTTONUP and cupdrag:
+            cupdrag = False
+            waitfordepress = False
+            if any(showrequest) and fullcustomersrect_forserveclick.collidepoint(event.pos):
+                numserved_start = showcupsmallgiven.count(1)
+                custswaiting_start = custwaiting.count(1)
+                showcupsmallgiven,custwaiting,cupsmallgiven_location,givennumbot,givennumtop, \
+                    givenstrawnum,giventapioca,timecustserved,happyorangry,gavesurprise,angrycustcount = serve_customer(
+                    customer1location_scaled,fullcustomers_width_scaled,
+                    showrequest,topchosen,highlightstraw,highlightlid,
+                    showcupsmallgiven,custwaiting,cupsmallgiven_location,givennumbot,
+                    givennumtop,givenstrawnum,giventapioca,timecustserved,surpriseme,
+                    givenice,gavesurprise,cupsmallnumbot,cupsmallnumtop,smallstrawnum,
+                    smalllidnum,smalltapioca,smallice,happyorangry,goalsmode,speedrun,angrycustcount)
+                numserved_end = showcupsmallgiven.count(1)
+                custswaiting_end = custwaiting.count(1)
+                if custswaiting_end<custswaiting_start or numserved_end > numserved_start:
+                    # now that you gave the cup and know what you gave, the large cup is removed
+                    showcuplarge, showcuplargeempty, showtapioca, showice, highlightlid, highlightstraw, topchosen, bottomchosen = remove_cup_large()
+            cuplargeposition = cuplargeposition_normal
+            # the servable cup is a unit made of: cuplarge_{}{}.png, largetapioca.png, largeicetop.png, largelid{}.png and largestraw{}.png
+                
     
     
     
@@ -337,16 +429,14 @@ while running:
         if showmodechoice: 
             if speedrunbuttonarea.collidepoint(pygame.mouse.get_pos()):
                 speedrun = True
-                angrycustcount = 0
                 # start the timer
                 lastcusttime = pygame.time.get_ticks()
                 daystarttime = pygame.time.get_ticks()
             elif goalsbuttonarea.collidepoint(pygame.mouse.get_pos()):
                 goalsmode = True
                 showgoalsinstructions = True
-                angrycustcount = 0
                 goals_profits_angry = [(50,10),(100,8),(150,5),(200,3)]
-                goalsday, totalnumdays, goalsdayduration = 0, 3, 210 # seconds
+                goalsday, totalnumdays, goalsdayduration = 0, 4, 210 # seconds
             elif infinitebuttonarea.collidepoint(pygame.mouse.get_pos()):
                 infinitemode = True
                 # start the customer timer
@@ -447,47 +537,18 @@ while running:
                         cupnumtop, topchosen = ingredienti+1, True
         if any(showrequest) and fullcustomersrect_forserveclick.collidepoint(pygame.mouse.get_pos()):
             # there is at least one boba request and the player is clicking on a customer area
-            xymouse_tuple = pygame.mouse.get_pos()
-            customerclicked = int(6-((customer1location_scaled[0]+fullcustomers_width_scaled)-xymouse_tuple[0])/(fullcustomers_width_scaled/6))
-            if showrequest[customerclicked] and all([topchosen, highlightstraw, highlightlid]): 
-                # the large cup has to be full and lid-ed and straw-ed to serve
-                showcupsmallgiven[customerclicked] = 1
-                custwaiting[customerclicked] = 0
-                cupsmallgiven_location[customerclicked] = (customer1location[0]+customerclicked*(customer_size[0]+customer_inbetween_pix), (customer1location[1]+customer_size[1]-1))
-                givennumbot[customerclicked] = cupnumbot
-                givennumtop[customerclicked] = cupnumtop
-                givenstrawnum[customerclicked], givenlidnum[customerclicked] = strawnum, lidnum
-                giventapioca[customerclicked], givenice[customerclicked] = showtapioca, showice
-                # start a countdown before showing the customer as happy or angry
-                timecustserved[customerclicked] = pygame.time.get_ticks()
-                # determine if the customer is satisfied or not
-                if (surpriseme[customerclicked] and not (givennumbot[customerclicked],
-                                                 givennumtop[customerclicked],
-                                                 givenstrawnum[customerclicked],
-                                                 givenlidnum[customerclicked],
-                                                 giventapioca[customerclicked],
-                                                 givenice[customerclicked]) == gavesurprise[customerclicked] and (random.random() > 0.25)) or \
-                    (givennumbot[customerclicked] == cupsmallnumbot[customerclicked] and \
-                        givennumtop[customerclicked] == cupsmallnumtop[customerclicked] and \
-                            givenstrawnum[customerclicked] == smallstrawnum[customerclicked] and \
-                                givenlidnum[customerclicked] == smalllidnum[customerclicked] and \
-                                    giventapioca[customerclicked] == smalltapioca[customerclicked] and \
-                                        givenice[customerclicked] == smallice[customerclicked]):
-                    happyorangry[customerclicked] = "happy"
-                    gavesurprise[customerclicked] = (0, 0, 0, 0, 0, 0)
-                else:
-                    happyorangry[customerclicked] = "angry"
-                    if goalsmode or speedrun: angrycustcount += 1
-                    if surpriseme[customerclicked]: 
-                        gavesurprise[customerclicked] = (givennumbot[customerclicked],
-                                                         givennumtop[customerclicked],
-                                                         givenstrawnum[customerclicked],
-                                                         givenlidnum[customerclicked],
-                                                         giventapioca[customerclicked],
-                                                         givenice[customerclicked])
-                # now that you gave the cup and know what you gave, the large cup is removed
-                showcuplarge, showcuplargeempty, showtapioca, showice, highlightlid, highlightstraw, topchosen, bottomchosen = remove_cup_large()
-                    
+            showcupsmallgiven,custwaiting,cupsmallgiven_location,givennumbot,givennumtop, \
+                givenstrawnum,giventapioca,timecustserved,happyorangry,gavesurprise,angrycustcount = serve_customer(customer1location_scaled,fullcustomers_width_scaled,
+                                   showrequest,topchosen,highlightstraw,highlightlid,
+                                   showcupsmallgiven,custwaiting,cupsmallgiven_location,givennumbot,
+                                   givennumtop,givenstrawnum,giventapioca,timecustserved,surpriseme,
+                                   givenice,gavesurprise,cupsmallnumbot,cupsmallnumtop,smallstrawnum,
+                                   smalllidnum,smalltapioca,smallice,happyorangry,goalsmode,speedrun,
+                                   angrycustcount)
+            # now that you gave the cup and know what you gave, the large cup is removed
+            showcuplarge, showcuplargeempty, showtapioca, showice, highlightlid, highlightstraw, topchosen, bottomchosen = remove_cup_large()
+             
+                       
             
     
     
@@ -521,10 +582,12 @@ while running:
                 if startmintime >= 0.8: startmintime -= 0.1 # never go below 700ms between custs
                 if startextratime >= 3: startextratime -= 0.9
                 countdown = (startmintime + random.choice(list(range(1,int(startextratime+1)))))*1000 
-            else:
+            elif goalsmode:
                 countdown = (2 + random.choice(list(range(1,10))))*1000 # min 2 seconds, max 11 seconds between customers
-                if goalsmode and goalsday == totalnumdays-1: # last day
+                if goalsday == totalnumdays-1: # last day
                     countdown = countdown - 1.1
+            else:
+                countdown = (2.5 + random.choice(list(range(1,15))))*1000
             lastcusttime = timenow
         if timesincelastcust >= countdown and not all(showrequest) and not gamefailed: readyforrequest = True
 
@@ -577,27 +640,6 @@ while running:
             show_numbers_in_font("goals", goals_profits_angry[goalsday-1][0], goalscash_loc, 1)
             show_numbers_in_font("goals", cashamount, goalscashmade_loc, 1)
     else:
-        if showcuplargeempty:
-            original_screen.blit(cuplargeemptyImg,cuplargeposition)
-        elif showcuplarge:
-            original_screen.blit(pygame.image.load("bobagoround_cuplarge{0}{1}.png".format(cupnumbot,cupnumtop)),cuplargeposition)
-        if showice:
-            if showcuplargeempty:
-                original_screen.blit(cuplargeicebottom,cuplargeposition)
-            elif bottomchosen and not topchosen:
-                original_screen.blit(cuplargeicemidImg,cuplargeposition)
-            elif topchosen:
-                original_screen.blit(cuplargeicetopImg,cuplargeposition)
-        if showtapioca:
-            original_screen.blit(cuplargetapiocaImg,cuplargeposition)
-        if highlightlid:
-            lidlocs = (lid1location, lid2location, lid3location, lid4location)
-            lidloc = lidlocs[lidnum-1]
-            original_screen.blit(highlightlidstrawImg,lidloc)
-        if highlightstraw:
-            strawlocs = (straw1location, straw2location, straw3location, straw4location)
-            strawloc = strawlocs[strawnum-1]
-            original_screen.blit(highlightlidstrawImg,strawloc)
         if goalsmode:
             for angrygoalcount in range(0,goals_profits_angry[goalsday][1],1):
                 original_screen.blit(angryindgrayImg,(original_width-(6*(angrygoalcount+1))-1*angrygoalcount,1))
@@ -610,6 +652,7 @@ while running:
             original_screen.blit(goalstimerboxImg,(1,1))
             timenow = pygame.time.get_ticks()
             timeleft = int(goalsdayduration - ((timenow-daystarttime)/1000))
+            if timeleft < 0: timeleft = 0
             show_numbers_in_font("gray",timeleft,(3,3),1)
         if any(showrequest):
             for ind, requestloctf in enumerate(showrequest):
@@ -647,16 +690,45 @@ while running:
                     if happyorangry[ind] == "happy"  and not cashreceived[ind] and timesinceserved < 1000:
                         cashamount += 10
                         cashreceived[ind] = True
-                    elif timesinceserved >= 1*1000 and timesinceserved <= 2.75*1000:
-                        original_screen.blit(pygame.image.load("bobagoround_customer{0}{1}.png".format(customeridnum[ind],happyorangry[ind])),customerlocation[ind])
                     elif timesinceserved > 3.5*1000:
                         cashreceived[ind] = False
                         if happyorangry[ind] == "happy": #remove the customer, they are satisfied
                             showcupsmallgiven[ind] = 0
                             showrequest[ind] = 0
                             pixelstoadd[ind] = maxpixtoadd
+                    elif timesinceserved >= 1*1000:
+                        if happyorangry[ind] == "happy" and timesinceserved <= 2.75*1000:
+                            original_screen.blit(pygame.image.load("bobagoround_customer{0}happy.png".format(customeridnum[ind])),customerlocation[ind])
+                        elif happyorangry[ind] == "angry":
+                            original_screen.blit(pygame.image.load("bobagoround_customer{0}angry.png".format(customeridnum[ind])),customerlocation[ind])
+        if highlightstraw:
+            strawlocs = (straw1location, straw2location, straw3location, straw4location)
+            strawloc = strawlocs[strawnum-1]
+            original_screen.blit(highlightlidstrawImg,strawloc)
+        if highlightlid:
+            lidlocs = (lid1location, lid2location, lid3location, lid4location)
+            lidloc = lidlocs[lidnum-1]
+            original_screen.blit(highlightlidstrawImg,lidloc)
         if showphoneorder:
             original_screen.blit(phoneorderImg,(0,0))
+        # putting the cuplarge draws at the end so it flies above all else during drag
+        if showcuplargeempty:
+            original_screen.blit(cuplargeemptyImg,cuplargeposition)
+        elif showcuplarge:
+            original_screen.blit(pygame.image.load("bobagoround_cuplarge{0}{1}.png".format(cupnumbot,cupnumtop)),cuplargeposition)
+        if showtapioca:
+            original_screen.blit(cuplargetapiocaImg,cuplargeposition)
+        if highlightlid:
+            original_screen.blit(pygame.image.load("bobagoround_largelid{0}.png".format(lidnum)),cuplargeposition)
+        if highlightstraw:
+            original_screen.blit(pygame.image.load("bobagoround_largestraw{0}.png".format(strawnum)),(cuplargeposition[0]+14,cuplargeposition[1]-5))
+        if showice:
+            if showcuplargeempty:
+                original_screen.blit(cuplargeicebottom,cuplargeposition)
+            elif bottomchosen and not topchosen:
+                original_screen.blit(cuplargeicemidImg,cuplargeposition)
+            elif topchosen:
+                original_screen.blit(cuplargeicetopImg,cuplargeposition)
         if gamefailed:
             original_screen.blit(failedImg,(0,0))
             if speedrun:
@@ -672,7 +744,7 @@ while running:
     fullwindow.blit(pygame.transform.scale(original_screen, fullwindow.get_rect().size), (0, 0))
     pygame.display.update()  # Or pygame.display.flip()
     if showdaywin and not alreadywaited:
-        pygame.time.sleep(600) # ms
+        pygame.time.wait(700) # ms
         alreadywaited = True
 
 exitgame()
