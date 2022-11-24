@@ -427,6 +427,7 @@ while running:
     if pygame.mouse.get_pressed()[0] and not waitfordepress:
         waitfordepress = True
         if showmodechoice: 
+            startmintime, startextratime = 3, 14 # reset the timer
             if speedrunbuttonarea.collidepoint(pygame.mouse.get_pos()):
                 speedrun = True
                 # start the timer
